@@ -12,6 +12,7 @@
 mod cfs;
 mod fifo;
 mod round_robin;
+mod moic;
 
 #[cfg(test)]
 mod tests;
@@ -21,6 +22,7 @@ extern crate alloc;
 pub use cfs::{CFSTask, CFScheduler};
 pub use fifo::{FifoScheduler, FifoTask};
 pub use round_robin::{RRScheduler, RRTask};
+pub use moic::{MOICScheduler, MOICTask};
 
 /// The base scheduler trait that all schedulers should implement.
 ///

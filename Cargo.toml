@@ -12,3 +12,5 @@ keywords = ["Starry"]
 
 [dependencies]
 linked_list = { git = "https://github.com/Starry-OS/linked_list.git" }
+moic_driver = { git = "https://github.com/ATS-INTC/moic_driver.git" }
+lazy_init = { git = "https://github.com/Starry-OS/lazy_init.git" }
