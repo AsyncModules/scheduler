@@ -8,14 +8,14 @@ use crate::BaseScheduler;
 
 /// A task wrapper for the [`MOICScheduler`].
 ///
-/// It add a time slice counter to use in round-robin scheduling.
+/// It add a task metadata to use in Moic scheduler.
 pub struct MOICTask<T> {
     inner: T,
     meta: UnsafeCell<TaskMeta>,
 }
 
 impl<T> MOICTask<T> {
-    /// Creates a new [`RRTask`] from the inner task struct.
+    /// Creates a new [`MOICTask`] from the inner task struct.
     pub const fn new(inner: T) -> Self {
         Self {
             inner,
@@ -33,6 +33,7 @@ impl<T> MOICTask<T> {
         self.get_mut_meta().inner = inner;
     }
 
+    /// Init the task
     pub fn init_arc(self: &Arc<Self>) {
         let inner = Arc::into_raw(self.clone()) as usize;
         self.init(inner);
@@ -63,25 +64,14 @@ unsafe impl<T> Send for MOICTask<T> {}
 const MOIC_MMIO_ADDR: usize = 0x100_0000 + 0xffff_ffc0_0000_0000;
 static mut COUNT: usize = 0;
 
-/// A simple [Round-Robin] (RR) preemptive scheduler.
-///
-/// It's very similar to the [`FifoScheduler`], but every task has a time slice
-/// counter that is decremented each time a timer tick occurs. When the current
-/// task's time slice counter reaches zero, the task is preempted and needs to
-/// be rescheduled.
-///
-/// Unlike [`FifoScheduler`], it uses [`VecDeque`] as the ready queue. So it may
-/// take O(n) time to remove a task from the ready queue.
-///
-/// [Round-Robin]: https://en.wikipedia.org/wiki/Round-robin_scheduling
-/// [`FifoScheduler`]: crate::FifoScheduler
+/// A Moic scheduler.
 pub struct MOICScheduler<T> {
     inner: Moic,
     _phantom: core::marker::PhantomData<T>,
 }
 
 impl<T> MOICScheduler<T> {
-    /// Creates a new empty [`RRScheduler`].
+    /// Creates a new empty [`MOICScheduler`].
     pub const fn new() -> Self {
         Self {
             inner: Moic::new(MOIC_MMIO_ADDR),
