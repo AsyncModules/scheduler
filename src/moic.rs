@@ -1,7 +1,6 @@
 use alloc::sync::Arc;
 use core::ops::Deref;
 use moic_driver::{TaskMeta, TaskId, Moic};
-use lazy_init::LazyInit;
 use core::cell::UnsafeCell;
 
 use crate::BaseScheduler;
@@ -61,7 +60,8 @@ impl<T> Deref for MOICTask<T> {
 unsafe impl<T> Sync for MOICTask<T> {}
 unsafe impl<T> Send for MOICTask<T> {}
 
-const MOIC_MMIO_ADDR: usize = 0x100_0000 + 0xffff_ffc0_0000_0000;
+const PHYSICAL_OFFSET: usize = 0xffff_ffc0_0000_0000;
+const MOIC_MMIO_ADDR: usize = 0x100_0000 + PHYSICAL_OFFSET;
 static mut COUNT: usize = 0;
 
 /// A Moic scheduler.
@@ -84,23 +84,22 @@ impl<T> MOICScheduler<T> {
     }
 }
 
-static OS_TID: LazyInit<TaskId> = LazyInit::new();
 
 impl<T> BaseScheduler for MOICScheduler<T> {
     type SchedItem = Arc<MOICTask<T>>;
 
     fn init(&mut self) {
-        if !OS_TID.is_init() {
-            OS_TID.init_by(TaskMeta::new(0, false));
-        }
+
         self.inner = Moic::new(MOIC_MMIO_ADDR + unsafe { COUNT } * 0x1000);
-        self.inner.switch_os(Some(*OS_TID));
+        let tid = TaskMeta::new(0, false);
+        let phy_tid = tid.value() - PHYSICAL_OFFSET;
+        self.inner.switch_os(Some(unsafe { TaskId::virt(phy_tid) }));
         unsafe { COUNT += 1 };
     }
 
     fn add_task(&mut self, task: Self::SchedItem) {
         task.init_arc();
-        let raw_meta = task.get_meta() as *const _ as usize;
+        let raw_meta = task.get_meta() as *const _ as usize - PHYSICAL_OFFSET;
         self.inner.add(unsafe { TaskId::virt(raw_meta) });
     }
 
@@ -110,7 +109,8 @@ impl<T> BaseScheduler for MOICScheduler<T> {
 
     fn pick_next_task(&mut self) -> Option<Self::SchedItem> {
         if let Ok(tid) = self.inner.fetch() {
-            let meta: &mut TaskMeta = tid.into();
+            let v = tid.value() + PHYSICAL_OFFSET;
+            let meta: &mut TaskMeta = unsafe { TaskId::virt(v).into() };
             let raw_ptr = meta.inner as *const MOICTask<T>;
             return Some(unsafe { Arc::from_raw(raw_ptr) });
         }
@@ -120,7 +120,7 @@ impl<T> BaseScheduler for MOICScheduler<T> {
     fn put_prev_task(&mut self, prev: Self::SchedItem, preempt: bool) {
         prev.init_arc();
         prev.get_mut_meta().is_preempt = preempt;
-        let raw_meta = prev.get_meta() as *const _ as usize;
+        let raw_meta = prev.get_meta() as *const _ as usize - PHYSICAL_OFFSET;
         self.inner.add(unsafe { TaskId::virt(raw_meta) })
     }
 
