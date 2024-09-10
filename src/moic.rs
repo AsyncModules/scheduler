@@ -84,17 +84,32 @@ impl<T> MOICScheduler<T> {
     }
 }
 
+#[cfg(feature = "moic_load_balanced")]
+static mut OS_TID: TaskId = TaskId::EMPTY;
 
 impl<T> BaseScheduler for MOICScheduler<T> {
     type SchedItem = Arc<MOICTask<T>>;
 
     fn init(&mut self) {
-
-        self.inner = Moic::new(MOIC_MMIO_ADDR + unsafe { COUNT } * 0x1000);
-        let tid = TaskMeta::new(0, false);
-        let phy_tid = tid.value() - PHYSICAL_OFFSET;
-        self.inner.switch_os(Some(unsafe { TaskId::virt(phy_tid) }));
-        unsafe { COUNT += 1 };
+        #[cfg(feature = "moic_load_balanced")]
+        unsafe {
+            if OS_TID.value() == 0 {
+                let tid = TaskMeta::new(0, false);
+                let phy_tid = tid.value() - PHYSICAL_OFFSET;
+                OS_TID = TaskId::virt(phy_tid);
+            }
+            self.inner = Moic::new(MOIC_MMIO_ADDR + COUNT * 0x1000);
+            self.inner.switch_os(Some(OS_TID));
+            COUNT += 1;
+        }
+        #[cfg(not(feature = "moic_load_balanced"))]
+        unsafe {
+            self.inner = Moic::new(MOIC_MMIO_ADDR + COUNT * 0x1000);
+            let tid = TaskMeta::new(0, false);
+            let phy_tid = tid.value() - PHYSICAL_OFFSET;
+            self.inner.switch_os(Some(TaskId::virt(phy_tid)));
+            COUNT += 1;
+        }
     }
 
     fn add_task(&mut self, task: Self::SchedItem) {
